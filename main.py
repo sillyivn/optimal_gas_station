@@ -94,6 +94,24 @@ def filter_non_dominated(candidates):
 
     return non_dominated
 
+def calculate_effective_cost(candidate, liters_to_buy, fuel_economy):
+    """Calculate purchase and round-trip fuel costs for a station."""
+
+    price_dollars_per_liter = candidate["regular_price"] / 100
+
+    purchase_cost = liters_to_buy * price_dollars_per_liter
+
+    round_trip_distance_km = candidate["distance_km"] * 2
+
+    travel_liters = round_trip_distance_km * fuel_economy / 100
+
+    travel_cost = travel_liters * price_dollars_per_liter
+
+    return {
+        "purchase_cost": purchase_cost,
+        "travel_cost": travel_cost,
+        "effective_cost": purchase_cost + travel_cost,
+    }
 ##################################
 
 def main():
@@ -111,7 +129,7 @@ def main():
         route_snapshot["source_cardog_snapshot"]
     )
     snapshot = load_json(snapshot_path)
-    
+
 
     # Get user starting coordinates from the Cardog request.
     latitude = snapshot["request_params"]["lat"]
@@ -144,8 +162,38 @@ def main():
     )
 
     recommended_candidates = filter_non_dominated(candidates)
+    # Ask for vehicle and fill-up information.
+    liters_to_buy = float(
+        input("How many litres do you plan to buy? ")
+    )
 
-    ## PRINT RESULTS ##
+    fuel_economy = float(
+        input("What is your vehicle's fuel economy (L/100 km)? ")
+    )
+
+
+    # Calculate the effective cost of each remaining candidate.
+    for candidate in recommended_candidates:
+        costs = calculate_effective_cost(
+            candidate,
+            liters_to_buy,
+            fuel_economy,
+        )
+
+        candidate.update(costs)
+
+    # Stop if no suitable stations were found.
+    if not recommended_candidates:
+        print("No suitable gas stations were found.")
+        return
+
+    # Choose the lowest effective cost.
+    # Travel time breaks a tie between equal costs.
+    best_candidate = min(recommended_candidates, key = lambda candidate: (candidate["effective_cost"], candidate["duration_minutes"])
+    )
+
+
+    ########################### PRINT RESULTS ################################
     print(
         f"{'Station':<20}"
         f"{'Price (¢/L)':>14}"
@@ -164,8 +212,36 @@ def main():
         )
 
     print("\nNon-dominated stations:")
+
     for candidate in recommended_candidates:
-        print(candidate["name"])
+            print(candidate["name"])
+
+    for candidate in recommended_candidates:
+        costs = calculate_effective_cost(
+            candidate,
+            liters_to_buy,
+            fuel_economy,
+        )
+        candidate.update(costs)
+
+
+    best_candidate = min(
+        recommended_candidates,
+        key=lambda candidate: (
+            candidate["effective_cost"],
+            candidate["duration_minutes"],
+        ),
+    )
+
+    print("\nRecommended station:")
+    print(f"Station: {best_candidate['name']}")
+    print(f"Fuel price: {best_candidate['regular_price']:.1f}¢/L")
+    print(f"One-way distance: {best_candidate['distance_km']:.1f} km")
+    print(f"One-way time: {best_candidate['duration_minutes']:.1f} minutes")
+    print(f"Fuel purchase cost: ${best_candidate['purchase_cost']:.2f}")
+    print(f"Round-trip travel fuel: ${best_candidate['travel_cost']:.2f}")
+    print(f"Effective total cost: ${best_candidate['effective_cost']:.2f}")
+    #############################################################################
 
 if __name__ == "__main__":
     main()

@@ -2,6 +2,7 @@ import pytest
 
 from main import (
     build_candidates,
+    calculate_effective_cost,
     filter_non_dominated,
     find_latest_json,
     get_regular_price,
@@ -148,3 +149,20 @@ def test_find_latest_json_raises_when_folder_is_empty(tmp_path):
 
     with pytest.raises(result):
         find_latest_json(tmp_path)
+
+
+def test_calculate_effective_cost_includes_round_trip():
+    candidate = {
+        "regular_price": 150.0,
+        "distance_km": 5.0,
+    }
+
+    result = calculate_effective_cost(
+        candidate,
+        liters_to_buy=40,
+        fuel_economy=8.0,
+    )
+
+    assert result["purchase_cost"] == pytest.approx(60.0)
+    assert result["travel_cost"] == pytest.approx(1.2)
+    assert result["effective_cost"] == pytest.approx(61.2)
