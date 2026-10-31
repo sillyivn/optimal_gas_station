@@ -41,6 +41,7 @@ timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%SZ")
 output_path = (
     Path("data")
     / "raw"
+    / "cardog"
     / f"cardog_stations_{timestamp}.json"
 )
 print(output_path)

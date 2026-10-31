@@ -90,6 +90,7 @@ timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%SZ")
 output_path = (
     Path("data")
     / "raw"
+    / "google_routes"
     / f"google_routes_{timestamp}.json"
 )
 
