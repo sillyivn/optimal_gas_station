@@ -1,8 +1,19 @@
 import json
-
 from pathlib import Path
 
-from pprint import pprint
+def load_json(path):
+    """Load a JSON file and return its contents."""
+    with path.open("r", encoding="utf-8") as file:
+        return json.load(file)
+
+def get_regular_price(station):
+    """Return a station's regular fuel price, or None if unavailable."""
+    for price in station["prices"]:
+        if price["fuel"] == "regular":
+            return price["centsPerLitre"]
+
+    return None
+
 
 # Filepath to Cardog Stations JSON
 snapshot_path = (
@@ -10,8 +21,6 @@ snapshot_path = (
     / "raw"
     / "cardog_stations_2026-10-31_020122Z.json"
 )
-with snapshot_path.open("r", encoding="utf-8") as file:
-    snapshot = json.load(file)
 
 #Filepath to Google Routes JSON
 route_snapshot_path = (
@@ -19,8 +28,9 @@ route_snapshot_path = (
     / "raw"
     / "google_routes_2026-10-31_020656Z.json"
 )
-with route_snapshot_path.open("r", encoding="utf-8") as file:
-    route_snapshot = json.load(file)
+
+snapshot = load_json(snapshot_path)
+route_snapshot = load_json(route_snapshot_path)
 
 
 # Get user starting coordinates from the Cardog request.
@@ -46,8 +56,6 @@ for station in stations:
     station_id = station["id"]
     stations_by_id[station_id] = station
 
-regular_price = None
-
 # Create Empty List for Potential Candidates
 candidates = []
 
@@ -65,15 +73,23 @@ for route in route_results:
     station_id = station_ids[destination_index]
     station = stations_by_id[station_id]
 
-    for price in station["prices"]:
-        if price["fuel"] == "regular":
-            regular_price = price["centsPerLitre"]
-            break
+    regular_price = get_regular_price(station)
 
     # Convert all values into more relevant units
     distance_km = route["distanceMeters"] / 1000
     duration_seconds = int(route["duration"].removesuffix("s"))
     duration_minutes = duration_seconds / 60
+
+    # Add fuel candidates to new dictionary
+    candidates.append(
+        {
+            "station_id": station_id,
+            "name": station["name"],
+            "regular_price": regular_price,
+            "distance_km": distance_km,
+            "duration_minutes": duration_minutes,
+        }
+    )
 
     print(
         f"{station['name']:<20}"
@@ -82,7 +98,9 @@ for route in route_results:
         f"{duration_minutes:>14.1f}"
     )
 
-# Loop through all stations and list name, price, and coordinates
+print("Candidate count:", len(candidates))
+
+# (UNUSED) Loop through ALL stations and list name, price, and coordinates
 for i in range(len(stations)):
     station_prices = stations[i]["prices"]
     station_name = stations[i]["name"]
