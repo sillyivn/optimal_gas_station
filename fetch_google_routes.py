@@ -1,10 +1,11 @@
-import os
 import json
+import os
 
 import requests
+
 from datetime import datetime, timezone
 from pathlib import Path
-
+from file_utils import find_latest_json, load_json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,14 +15,11 @@ google_api_key = os.getenv("GOOGLE_MAPS_API_KEY")
 print("Google API key loaded:", google_api_key is not None)
 
 # View the data retrieved from the Cardog API
-snapshot_path = (
-    Path("data")
-    / "raw"
-    / "cardog_stations_2026-10-31_020122Z.json"
+snapshot_path = find_latest_json(
+    Path("data") / "raw" / "cardog"
 )
 
-with snapshot_path.open("r", encoding="utf-8") as file:
-    snapshot = json.load(file)
+snapshot = load_json(snapshot_path)
 
 # Query only data from the stations
 stations = snapshot["data"]["stations"]
@@ -58,7 +56,7 @@ origins = [
 
 destinations = []
 
-for i in range(5):
+for i in range(len(stations)):
     station = stations[i]
 
     station_latitude = station["location"]["latitude"]
@@ -95,6 +93,11 @@ output_path = (
 )
 
 print(output_path)
+print(f"Prepared {len(destinations)} route destinations.")
+output_path.parent.mkdir(
+    parents=True,
+    exist_ok=True,
+)
 
 user_response = input("Input ROUTE to activate Google Routes API: ")
 
@@ -107,7 +110,7 @@ response = requests.post(
     url,
     headers=headers,
     json=body,
-    timeout=10,
+    timeout=60,
 )
 
 print(response.status_code)
@@ -125,7 +128,7 @@ route_snapshot = {
         "longitude": origin[1],
     },
     "destination_station_ids": [
-        station["id"] for station in stations[:5]
+        station["id"] for station in stations
     ],
     "data": route_data,
 }
