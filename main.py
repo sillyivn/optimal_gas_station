@@ -1,21 +1,9 @@
-import json
 from pathlib import Path
+from datetime import datetime
+
+from file_utils import find_latest_json, load_json
 
 # Helper Functions
-def load_json(path):
-    """Load a JSON file and return its contents."""
-    with path.open("r", encoding="utf-8") as file:
-        return json.load(file)
-
-def find_latest_json(folder):
-    """Return the newest timestamped JSON file in a folder."""
-    json_files = list(folder.glob("*.json"))
-
-    if not json_files:
-        raise FileNotFoundError(f"No JSON files found in {folder}")
-
-    return max(json_files, key=lambda path: path.name)
-
 def get_regular_price(station):
     """Return a station's regular fuel price, or None if unavailable."""
     for price in station["prices"]:
@@ -47,11 +35,25 @@ def build_candidates(route_results, station_ids, stations_by_id):
         duration_seconds = int(route["duration"].removesuffix("s"))
         duration_minutes = duration_seconds / 60
 
+        # Find candidate address
+        address_data = station.get("address", {})
+
+        address = ", ".join(part
+            for part in [
+                address_data.get("street"),
+                address_data.get("city"),
+                address_data.get("state"),
+                address_data.get("postalCode"),
+            ]
+            if part # (boolean)
+        )
+
         # Add the fuel candidate to the candidate list.
         candidates.append(
             {
                 "station_id": station_id,
                 "name": station["name"],
+                "address": address,
                 "regular_price": regular_price,
                 "distance_km": distance_km,
                 "duration_minutes": duration_minutes,
@@ -112,6 +114,43 @@ def calculate_effective_cost(candidate, liters_to_buy, fuel_economy):
         "travel_cost": travel_cost,
         "effective_cost": purchase_cost + travel_cost,
     }
+
+def find_regular_price_date_range(stations):
+    """Return the oldest and newest regular-price reports."""
+    regular_reports = []
+
+    for station in stations:
+        for price in station["prices"]:
+            if price["fuel"] == "regular" and price.get("postedAt"):
+                posted_at = datetime.fromisoformat(
+                    price["postedAt"].replace("Z", "+00:00")
+                )
+
+                regular_reports.append(
+                    {
+                        "station": station["name"],
+                        "price": price["centsPerLitre"],
+                        "posted_at": posted_at,
+                    }
+                )
+                break
+
+    if not regular_reports:
+        return None, None
+
+    oldest_report = min(
+        regular_reports,
+        key=lambda report: report["posted_at"],
+    )
+
+    newest_report = max(
+        regular_reports,
+        key=lambda report: report["posted_at"],
+    )
+
+    return oldest_report, newest_report
+
+
 ##################################
 
 def main():
@@ -129,6 +168,7 @@ def main():
         route_snapshot["source_cardog_snapshot"]
     )
     snapshot = load_json(snapshot_path)
+    print("Cardog snapshot being used:", snapshot_path)
 
 
     # Get user starting coordinates from the Cardog request.
@@ -140,6 +180,21 @@ def main():
     # Get Cardog's list of stations.
     #   Each station contains its ID, name, address, coordinates, and fuel prices.
     stations = snapshot["data"]["stations"]
+    
+    oldest_report, newest_report = find_regular_price_date_range(stations)
+
+    if oldest_report is not None:
+        print("\nCardog regular-price date range:")
+        print(
+            f"Newest: {newest_report['station']} — "
+            f"{newest_report['price']}¢/L — "
+            f"{newest_report['posted_at']}"
+        )
+        print(
+            f"Oldest: {oldest_report['station']} — "
+            f"{oldest_report['price']}¢/L — "
+            f"{oldest_report['posted_at']}"
+        )
 
     # Get the ordered list of station IDs that was sent to Google.
     station_ids = route_snapshot["destination_station_ids"]
@@ -161,7 +216,11 @@ def main():
         stations_by_id,
     )
 
+    # Sort by distance
+    candidates.sort(key = lambda candidate: candidate["distance_km"])
+
     recommended_candidates = filter_non_dominated(candidates)
+
     # Ask for vehicle and fill-up information.
     liters_to_buy = float(
         input("How many litres do you plan to buy? ")
@@ -195,20 +254,23 @@ def main():
 
     ########################### PRINT RESULTS ################################
     print(
-        f"{'Station':<20}"
-        f"{'Price (¢/L)':>14}"
-        f"{'Distance (km)':>16}"
-        f"{'Time (min)':>14}"
+        f"{'#':<4}"
+        f"{'Station':<22}"
+        f"{'Price':>10}"
+        f"{'Distance':>12}"
+        f"{'Time':>10}  "
+        f"Address"
     )
+    print("-" * 100)
 
-    print("-" * 64)
-
-    for candidate in candidates:
+    for number, candidate in enumerate(candidates, start=1):
         print(
-            f"{candidate['name']:<20}"
-            f"{candidate['regular_price']:>14.1f}"
-            f"{candidate['distance_km']:>16.1f}"
-            f"{candidate['duration_minutes']:>14.1f}"
+            f"{number:<4}"
+            f"{candidate['name'][:20]:<22}"
+            f"{candidate['regular_price']:>9.1f}¢"
+            f"{candidate['distance_km']:>10.1f} km"
+            f"{candidate['duration_minutes']:>8.1f} min  "
+            f"{candidate['address']}"
         )
 
     print("\nNon-dominated stations:")
