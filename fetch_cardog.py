@@ -32,7 +32,7 @@ params = {
     "lng": longitude,
     "radius_km": 100,
     "fuel": "regular",
-    "sort": "price", # Sort by "price" or "distance"
+    "sort": "distance", # Sort by "price" or "distance"
     "limit": 100
 }
 
@@ -46,7 +46,6 @@ output_path = (
 print(output_path)
 
 user_response = input("Input FETCH to activate Cardog API: ")
-
 
 if user_response != "FETCH":
     print("Cancelled")
