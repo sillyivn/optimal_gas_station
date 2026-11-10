@@ -21,18 +21,19 @@ if not google_api_key:
     )
     raise SystemExit
 
-# View the data retrieved from the Cardog API
+# Load the newest normalized, fresh, and deduplicated station set.
 snapshot_path = find_latest_json(
-    Path("data") / "raw" / "cardog"
+    Path("data") / "processed" / "merged_fuel_stations"
 )
 
 snapshot = load_json(snapshot_path)
 
-# Query only data from the stations
-stations = snapshot["data"]["stations"]
+# Query only data from the unique stations.
+stations = snapshot["stations"]
 
-# Generate origin coordinate point
-latitude, longitude = snapshot["request_params"]["lat"], snapshot["request_params"]["lng"]
+# Generate the origin coordinate point.
+latitude = snapshot["origin"]["latitude"]
+longitude = snapshot["origin"]["longitude"]
 origin = (latitude, longitude)
 
 print(origin)
@@ -66,8 +67,8 @@ destinations = []
 for i in range(len(stations)):
     station = stations[i]
 
-    station_latitude = station["location"]["latitude"]
-    station_longitude = station["location"]["longitude"]
+    station_latitude = station["latitude"]
+    station_longitude = station["longitude"]
 
     destination = {
         "waypoint": {
@@ -129,13 +130,13 @@ route_data = response.json()
 
 route_snapshot = {
     "fetched_at": datetime.now(timezone.utc).isoformat(),
-    "source_cardog_snapshot": str(snapshot_path),
+    "source_station_snapshot": str(snapshot_path),
     "origin": {
         "latitude": origin[0],
         "longitude": origin[1],
     },
     "destination_station_ids": [
-        station["id"] for station in stations
+        station["station_id"] for station in stations
     ],
     "data": route_data,
 }

@@ -30,7 +30,6 @@ def refresh_raw_data():
         ("Cardog", "fetch_cardog.py", "FETCH"),
         ("Google fuel", "fetch_google_fuel.py", "FUEL"),
         ("GasBuddy (optional)", "fetch_gasbuddy.py", "GASBUDDY"),
-        ("Google Routes", "fetch_google_routes.py", "ROUTE"),
     )
 
     for provider, script_name, approval_code in fetchers:
@@ -42,10 +41,23 @@ def refresh_raw_data():
                 "The application will use saved data if available."
             )
 
+    print("\nNormalizing and deduplicating the newest fuel data...")
+
+    if not run_project_script("normalize_fuel_data.py"):
+        print("Fuel-data processing failed. Using saved processed data.")
+
+    print("\nFetching Google Routes data...")
+
+    if not run_project_script("fetch_google_routes.py", "ROUTE"):
+        print("Google Routes fetch failed. Using saved route data.")
+
 
 def get_regular_price(station):
     """Return a station's regular fuel price, or None if unavailable."""
-    for price in station["prices"]:
+    if "price_cents_per_litre" in station:
+        return station["price_cents_per_litre"]
+
+    for price in station.get("prices", []):
         if price["fuel"] == "regular":
             return price["centsPerLitre"]
     return None
@@ -77,15 +89,18 @@ def build_candidates(route_results, station_ids, stations_by_id):
         # Find candidate address
         address_data = station.get("address", {})
 
-        address = ", ".join(part
-            for part in [
-                address_data.get("street"),
-                address_data.get("city"),
-                address_data.get("state"),
-                address_data.get("postalCode"),
-            ]
-            if part # (boolean)
-        )
+        if isinstance(address_data, str):
+            address = address_data
+        else:
+            address = ", ".join(part
+                for part in [
+                    address_data.get("street"),
+                    address_data.get("city"),
+                    address_data.get("state"),
+                    address_data.get("postalCode"),
+                ]
+                if part # (boolean)
+            )
 
         # Add the fuel candidate to the candidate list.
         candidates.append(
@@ -159,6 +174,18 @@ def find_regular_price_date_range(stations):
     regular_reports = []
 
     for station in stations:
+        if station.get("observed_at"):
+            regular_reports.append(
+                {
+                    "station": station["name"],
+                    "price": station["price_cents_per_litre"],
+                    "posted_at": datetime.fromisoformat(
+                        station["observed_at"].replace("Z", "+00:00")
+                    ),
+                }
+            )
+            continue
+
         for price in station["prices"]:
             if price["fuel"] == "regular" and price.get("postedAt"):
                 posted_at = datetime.fromisoformat(
@@ -203,9 +230,8 @@ def main():
         refresh_raw_data()
     else:
         print("Using the most recent saved data.")
-
-    print("\nNormalizing the newest saved fuel data...")
-    run_project_script("normalize_fuel_data.py")
+        print("\nProcessing the newest saved fuel data...")
+        run_project_script("normalize_fuel_data.py")
 
     # IMPORTING FILES
     
@@ -215,28 +241,30 @@ def main():
     )
     route_snapshot = load_json(route_snapshot_path)
 
-    # Load the exact Cardog snapshot used by that Google Routes request.
+    # Load the exact station snapshot used by that Google Routes request.
     snapshot_path = Path(
-        route_snapshot["source_cardog_snapshot"]
+        route_snapshot.get(
+            "source_station_snapshot",
+            route_snapshot.get("source_cardog_snapshot"),
+        )
     )
     snapshot = load_json(snapshot_path)
-    print("Cardog snapshot being used:", snapshot_path)
+    print("Station snapshot being used:", snapshot_path)
 
 
-    # Get user starting coordinates from the Cardog request.
-    latitude = snapshot["request_params"]["lat"]
-    longitude = snapshot["request_params"]["lng"]
+    # Get user starting coordinates from the route request.
+    latitude = route_snapshot["origin"]["latitude"]
+    longitude = route_snapshot["origin"]["longitude"]
 
     origin = (latitude, longitude)
 
-    # Get Cardog's list of stations.
-    #   Each station contains its ID, name, address, coordinates, and fuel prices.
-    stations = snapshot["data"]["stations"]
+    # Get the station list used by the route request.
+    stations = snapshot.get("stations", snapshot.get("data", {}).get("stations", []))
     
     oldest_report, newest_report = find_regular_price_date_range(stations)
 
     if oldest_report is not None:
-        print("\nCardog regular-price date range:")
+        print("\nRegular-price date range:")
         print(
             f"Newest: {newest_report['station']} — "
             f"{newest_report['price']}¢/L — "
@@ -259,7 +287,7 @@ def main():
     stations_by_id = {}
 
     for station in stations:
-        station_id = station["id"]
+        station_id = station.get("station_id", station.get("id"))
         stations_by_id[station_id] = station
 
     candidates = build_candidates(

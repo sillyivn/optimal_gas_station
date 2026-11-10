@@ -90,6 +90,34 @@ def test_build_candidates_matches_routes_to_stations():
     assert result[1]["duration_minutes"] == pytest.approx(3.0)
 
 
+def test_build_candidates_accepts_merged_station_data():
+    stations_by_id = {
+        "google:station-a": {
+            "station_id": "google:station-a",
+            "name": "Station A",
+            "address": "1 Test Street, Vaughan, ON",
+            "price_cents_per_litre": 159.9,
+        }
+    }
+    station_ids = ["google:station-a"]
+    route_results = [
+        {
+            "destinationIndex": 0,
+            "distanceMeters": 1500,
+            "duration": "240s",
+        }
+    ]
+
+    result = build_candidates(
+        route_results,
+        station_ids,
+        stations_by_id,
+    )
+
+    assert result[0]["regular_price"] == 159.9
+    assert result[0]["address"] == "1 Test Street, Vaughan, ON"
+
+
 def test_filter_non_dominated_removes_worse_stations():
     candidates = [
         {
