@@ -12,6 +12,10 @@ load_dotenv()
 cardog_api_key = os.getenv("CARDOG_API_KEY")
 print("Cardog API key loaded:", cardog_api_key is not None)
 
+if not cardog_api_key:
+    print("Cardog fetch cancelled: CARDOG_API_KEY is missing from .env.")
+    raise SystemExit
+
 ############################################
 # Start of Code
 
@@ -44,6 +48,7 @@ output_path = (
     / "cardog"
     / f"cardog_stations_{timestamp}.json"
 )
+output_path.parent.mkdir(parents=True, exist_ok=True)
 print(output_path)
 
 user_response = input("Input FETCH to activate Cardog API: ")
@@ -72,6 +77,7 @@ data = response.json()
 
 snapshot = {
     "fetched_at": datetime.now(timezone.utc).isoformat(),
+    "provider": "cardog",
     "request_params": params,
     "data": data
     }
@@ -79,4 +85,8 @@ snapshot = {
 with output_path.open("w", encoding="utf-8") as file:
     json.dump(snapshot, file, indent=2)
 
+stations = data.get("stations", [])
+
+print(f"Stations returned: {len(stations)}")
+print(f"Cardog snapshot date: {data.get('asOf', 'unknown')}")
 print(f"Saved response to: {output_path}")

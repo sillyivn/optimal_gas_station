@@ -1,9 +1,48 @@
+import subprocess
+import sys
+
 from pathlib import Path
 from datetime import datetime
 
 from file_utils import find_latest_json, load_json
 
 # Helper Functions
+def run_project_script(script_name, approval_code=None):
+    """Run one project script and return whether it completed successfully."""
+    project_folder = Path(__file__).resolve().parent
+    script_path = project_folder / script_name
+    script_input = f"{approval_code}\n" if approval_code else None
+
+    result = subprocess.run(
+        [sys.executable, str(script_path)],
+        cwd=project_folder,
+        input=script_input,
+        text=True,
+        check=False,
+    )
+
+    return result.returncode == 0
+
+
+def refresh_raw_data():
+    """Fetch fresh provider and route snapshots."""
+    fetchers = (
+        ("Cardog", "fetch_cardog.py", "FETCH"),
+        ("Google fuel", "fetch_google_fuel.py", "FUEL"),
+        ("GasBuddy (optional)", "fetch_gasbuddy.py", "GASBUDDY"),
+        ("Google Routes", "fetch_google_routes.py", "ROUTE"),
+    )
+
+    for provider, script_name, approval_code in fetchers:
+        print(f"\nFetching {provider} data...")
+
+        if not run_project_script(script_name, approval_code):
+            print(
+                f"{provider} fetch failed. "
+                "The application will use saved data if available."
+            )
+
+
 def get_regular_price(station):
     """Return a station's regular fuel price, or None if unavailable."""
     for price in station["prices"]:
@@ -154,6 +193,19 @@ def find_regular_price_date_range(stations):
 ##################################
 
 def main():
+
+    refresh_code = input(
+        "Input REFRESH to fetch new API data, "
+        "or press Enter to use saved data: "
+    )
+
+    if refresh_code == "REFRESH":
+        refresh_raw_data()
+    else:
+        print("Using the most recent saved data.")
+
+    print("\nNormalizing the newest saved fuel data...")
+    run_project_script("normalize_fuel_data.py")
 
     # IMPORTING FILES
     

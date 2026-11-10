@@ -14,6 +14,13 @@ google_api_key = os.getenv("GOOGLE_MAPS_API_KEY")
 
 print("Google API key loaded:", google_api_key is not None)
 
+if not google_api_key:
+    print(
+        "Google Routes fetch cancelled: "
+        "GOOGLE_MAPS_API_KEY is missing from .env."
+    )
+    raise SystemExit
+
 # View the data retrieved from the Cardog API
 snapshot_path = find_latest_json(
     Path("data") / "raw" / "cardog"
